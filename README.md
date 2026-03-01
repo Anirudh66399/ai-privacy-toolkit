@@ -44,9 +44,9 @@ cd ai-privacy-toolkit
 # Please note if using windows run the below commands in CMD.
 python -m venv .venv
 .\.venv\Scripts\Activate.bat
-pip install --upgrade pip setuptools wheel
-pip install -r requirements.txt
-pip install ai-privacy-toolkit
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -r requirements.txt
+python -m pip install ai-privacy-toolkit
 python demo_security_features.py
 ```
 
