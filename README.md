@@ -31,10 +31,15 @@ Call sequence: `print_risk_report()` → `compute_per_record_risk()` → `print_
 ## How to Run
 
 ```bash
+# Method 1
 git clone https://github.com/IBM/ai-privacy-toolkit
 cd ai-privacy-toolkit
 # copy sensitivity_weighter.py, privacy_auditor.py,
-# reidentification_monitor.py, demo_security_features.py here
+# reidentification_monitor.py, demo_security_features.py, requirements.txt here and follow the next steps
+
+# Method 2
+# Download the updated git, open a terminal in that folder and follow the next steps
+
 python -m venv .venv
 .\.venv\Scripts\Activate.bat
 pip install --upgrade pip setuptools wheel
