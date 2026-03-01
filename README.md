@@ -40,6 +40,8 @@ cd ai-privacy-toolkit
 # Method 2
 # Download the updated git, open a terminal in that folder and follow the next steps
 
+
+# Please note if using windows run the below commands in CMD.
 python -m venv .venv
 .\.venv\Scripts\Activate.bat
 pip install --upgrade pip setuptools wheel
