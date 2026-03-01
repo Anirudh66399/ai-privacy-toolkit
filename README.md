@@ -1,50 +1,57 @@
-[![OpenSSF Best Practices](https://bestpractices.coreinfrastructure.org/projects/5836/badge)](https://bestpractices.coreinfrastructure.org/projects/5836)
+# ai-privacy-toolkit — Security Extensions
 
-# ai-privacy-toolkit
-<p align="center">
-  <img src="docs/images/logo with text.jpg?raw=true" width="467" title="ai-privacy-toolkit logo">
-</p>
-<br />
+**Paper:** Goldsteen, A., Ezov, G., Shmelkin, R., Moffie, M., & Farkash, A. (2022). Data minimization for GDPR compliance in machine learning models. *AI and Ethics*, 2, 477–491.
 
-A toolkit for tools and techniques related to the privacy and compliance of AI models.
+**Original repo:** https://github.com/IBM/ai-privacy-toolkit
 
-The [**anonymization**](apt/anonymization/README.md) module contains methods for anonymizing ML model 
-training data, so that when a model is retrained on the anonymized data, the model itself will also be 
-considered anonymous. This may help exempt the model from different obligations and restrictions 
-set out in data protection regulations such as GDPR, CCPA, etc. 
+---
 
-The [**minimization**](apt/minimization/README.md) module contains methods to help adhere to the data 
-minimization principle in GDPR for ML models. It enables to reduce the amount of 
-personal data needed to perform predictions with a machine learning model, while still enabling the model
-to make accurate predictions. This is done by by removing or generalizing some of the input features.
+## Overview
 
-The [**dataset assessment**](apt/risk/data_assessment/README.md) module implements a tool for privacy assessment of
-synthetic datasets that are to be used in AI model training.
+This project extends the IBM ai-privacy-toolkit with three security features. The toolkit generalises ML input features at runtime (e.g. replacing an exact age with a 10-year range) so less precise personal data is collected while keeping model accuracy within a chosen threshold, supporting GDPR Article 5(1)(c). Each feature addresses a specific gap in the original paper.
 
-Official ai-privacy-toolkit documentation: https://ai-privacy-toolkit.readthedocs.io/en/latest/
+---
 
-Installation: pip install ai-privacy-toolkit
+## Features and Security Mechanisms
 
-For more information or help using or improving the toolkit, please contact Abigail Goldsteen at abigailt@il.ibm.com, 
-or join our Slack channel: https://aip360.mybluemix.net/community.
+**Feature 1 — Sensitivity-Weighted Generalisation** (`sensitivity_weighter.py`): Section 5.1 describes a weighted NCP variant but never implements it. Without weights, race is treated identically to hours-per-week in the privacy score, violating GDPR Article 9. This feature assigns sensitivity tiers (low/medium/high/critical) to each feature. `compute_weighted_ncp()` multiplies each feature's NCP by its normalised sensitivity weight before averaging, so GDPR Article 9 attributes (race, sex, weight=8) influence the score far more than low-sensitivity features (weight=1). The result is interpreted directionally: if weighted NCP > standard NCP, sensitive features were generalised more aggressively than average — the desired GDPR Article 9 outcome. If weighted NCP < standard NCP, sensitive features are underprotected and standard NCP hides the gap entirely. `get_removal_priority()` reorders de-generalisation using `weight / ILAG(f)`, ensuring critical features are de-generalised last when accuracy needs recovering. Features with NCP=0 are excluded from the removal queue and listed separately as candidates for future generalisation. NCP values are computed from the actual toolkit output using a representative-mapping method: for each unique representative value in a generalised feature, the range of original values that mapped to it is measured, and `(orig_max - orig_min) / domain` gives that bin's NCP contribution, weighted by record count. `print_sensitivity_report()` outputs a full per-feature breakdown with a directional verdict.
 
-We welcome new contributors! If you're interested, take a look at our [**contribution guidelines**](https://github.com/IBM/ai-privacy-toolkit/wiki/Contributing).
+Call sequence: `SensitivityProfile.from_tiers()` → `compute_weighted_ncp()` → `get_removal_priority()` → `print_sensitivity_report()`
 
-**Related toolkits:**
+**Feature 2 — k-Anonymity & Homogeneity Attack Auditor** (`privacy_auditor.py`): Section 4.3 measures disclosure risk with Equation 6 but never checks k-anonymity (Sweeney, 2002) or l-diversity (Machanavajjhala et al., 2007), and does not detect homogeneity attacks — where all records in a group share the same sensitive value, letting an attacker infer it without identifying anyone. `compute_k_anonymity()` finds the smallest equivalence class via `groupby().size().min()`. `detect_homogeneity_attacks()` iterates groups and flags any where `Counter(sensitive_values)` has only one key. `compute_l_diversity()` uses `nunique()` per group. `print_audit_report()` orchestrates all checks and prints a PASS/FAIL verdict. The audit compares a matched original test set against the generalised output — both drawn from the same `train_test_split` indices — so the before/after comparison reflects the same individuals.
 
-ai-minimization-toolkit - has been migrated into this toolkit.
+Call sequence: `print_audit_report()` → internally calls `compute_k_anonymity()`, `compute_disclosure_risk()`, `detect_homogeneity_attacks()`, `compute_l_diversity()`, `suggest_remediation()`
 
-[differential-privacy-library](https://github.com/IBM/differential-privacy-library): A 
-general-purpose library for experimenting with, investigating and developing applications in, 
-differential privacy.
+**Feature 3 — Per-Record Re-identification Risk Monitor** (`reidentification_monitor.py`): Equation 6 gives one average risk score, which can hide fully identifiable individuals. GDPR Article 5(1)(f) implies risk must be assessed at the individual level. `compute_per_record_risk()` applies `1/freq(r)` to every record by merging the `groupby().size()` frequency table back onto each row. `flag_high_risk_records()` filters records above a threshold (default 0.2, meaning groups of five or fewer). `find_culprit_features()` computes `distinct_in_high_risk / distinct_in_full` per feature to rank which features cause uniqueness. `suggest_targeted_generalisation()` estimates how many flagged records each targeted fix would rescue.
 
-[adversarial-robustness-toolbox](https://github.com/Trusted-AI/adversarial-robustness-toolbox):
-A Python library for Machine Learning Security. Includes an attack module called *inference* that contains privacy attacks on ML models 
-(membership inference, attribute inference, model inversion and database reconstruction) as well as a *privacy* metrics module that contains
-membership leakage metrics for ML models.
+Call sequence: `print_risk_report()` → `compute_per_record_risk()` → `print_risk_distribution()` → `flag_high_risk_records()` → `find_culprit_features()` → `suggest_targeted_generalisation()`
 
+---
 
-Citation
---------
-Abigail Goldsteen, Ola Saadi, Ron Shmelkin, Shlomit Shachor, Natalia Razinkov,
-"AI privacy toolkit", SoftwareX, Volume 22, 2023, 101352, ISSN 2352-7110, https://doi.org/10.1016/j.softx.2023.101352.
+## How to Run
+
+```bash
+git clone https://github.com/IBM/ai-privacy-toolkit
+cd ai-privacy-toolkit
+# copy sensitivity_weighter.py, privacy_auditor.py,
+# reidentification_monitor.py, demo_security_features.py here
+python -m venv .venv
+.\.venv\Scripts\Activate.bat
+pip install --upgrade pip setuptools wheel
+pip install -r requirements.txt
+pip install ai-privacy-toolkit
+python demo_security_features.py
+```
+
+The demo loads the UCI Adult dataset directly from the UCI repository URL. On first run it downloads ~3 MB and requires an internet connection; if offline it falls back to synthetic data automatically so all three features can still be demonstrated.
+
+All output prints to the terminal — no extra configuration is required.
+
+---
+
+## References
+
+- Goldsteen et al. (2022). *AI and Ethics*, 2, 477–491.
+- Sweeney (2002). k-anonymity. *IJUFKS*, 10, 557–570.
+- Machanavajjhala et al. (2007). l-diversity. *ACM TKDD*, 1(1).
+- GDPR Articles 5(1)(c), 5(1)(f), 9.
